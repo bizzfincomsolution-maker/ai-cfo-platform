@@ -1,0 +1,27 @@
+# Environment files - NEVER push to GitHub
+.env
+backend/.env
+frontend/.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Anaconda
+.conda/
+
+# Data files (too large for GitHub)
+backend/data/*.csv
+
+# Dependencies
+node_modules/
+
+# Build
+frontend/build/
+
+# VS Code
+.vscode/
