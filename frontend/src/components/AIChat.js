@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { supabase } from '../supabaseClient'
 
 const SUGGESTED_QUESTIONS = [
   'What is my total profit this month?',
@@ -9,38 +10,35 @@ const SUGGESTED_QUESTIONS = [
   'Which vendor am I paying the most?',
 ]
 
-const MOCK_RESPONSES = {
-  'What is my total profit this month?':
-    'Based on your May 2026 data, your total profit is Rs.3.8Cr with a profit margin of 17.2%. Revenue stands at Rs.22.1Cr against expenses of Rs.18.3Cr. This is 8% higher than your April 2026 profit of Rs.3.5Cr.',
-  'Am I spending too much on any category?':
-    'Your top expense categories are: Salaries (35% — Rs.6.4Cr), Marketing (24% — Rs.4.4Cr), and Software (15% — Rs.2.7Cr). Marketing spend has increased 22% vs last quarter. Consider reviewing your marketing ROI.',
-  'When is my next GST filing deadline?':
-    'Your next deadlines are: GSTR-1 due 11th June 2026 (18 days away) and GSTR-3B due 20th June 2026 (27 days away). TDS return is due 31st May 2026 — only 7 days! Please prioritize this.',
-  'What is my cash flow trend?':
-    'Your cash flow has been positive for 8 consecutive months. Current month: Rs.3.8Cr positive. Strongest months were March 2026 (Rs.5.2Cr) due to year-end billing. Watch out — July typically sees a dip based on historical patterns.',
-  'How can I reduce my tax liability?':
-    'Three recommendations: 1) Claim Rs.85,000 in unclaimed ITC from matched GST entries. 2) Accelerate equipment purchases before March 31st for depreciation benefits. 3) Ensure all vendor GSTINs are validated — 2 vendors have mismatches affecting your ITC claims.',
-  'Which vendor am I paying the most?':
-    'Top vendors by spend: 1) Nexus Payroll Account — Rs.6.4Cr (salaries). 2) Google India — Rs.1.2Cr (marketing). 3) Microsoft India — Rs.0.9Cr (software). 4) AWS India — Rs.0.7Cr (cloud). Consider negotiating volume discounts with Google and Microsoft.',
-}
-
 function AIChat() {
-  const [messages, setMessages]   = useState([
+  const [messages, setMessages] = useState([
     {
       role: 'assistant',
       text: 'Hello! I am your AI CFO Assistant powered by Groq LLaMA 3. I have access to your live financial data from Supabase. Ask me anything about your finances!',
     }
   ])
-  const [input, setInput]         = useState('')
-  const [loading, setLoading]     = useState(false)
+  const [input, setInput]                 = useState('')
+  const [loading, setLoading]             = useState(false)
   const [showSuggested, setShowSuggested] = useState(true)
+  const [txnCount, setTxnCount]           = useState(null)
   const bottomRef = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const sendMessage = (text) => {
+  // Fetch real transaction count from Supabase
+  useEffect(() => {
+    const fetchCount = async () => {
+      const { count } = await supabase
+        .from('transactions')
+        .select('*', { count: 'exact', head: true })
+      setTxnCount(count)
+    }
+    fetchCount()
+  }, [])
+
+  const sendMessage = async (text) => {
     const question = text || input.trim()
     if (!question) return
 
@@ -49,14 +47,25 @@ function AIChat() {
     setLoading(true)
     setShowSuggested(false)
 
-    // Simulate AI response
-    setTimeout(() => {
-      const response = MOCK_RESPONSES[question] ||
-        `Based on your live Supabase data: Your current revenue is Rs.22.1Cr with expenses of Rs.18.3Cr, giving a healthy cash flow of Rs.3.8Cr and profit margin of 17.2%. For specific insights about "${question}", I'm analyzing your ${2647} transactions across 38 months of data.`
-
-      setMessages(prev => [...prev, { role: 'assistant', text: response }])
+    try {
+      const response = await fetch('http://localhost:8000/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question })
+      })
+      const data = await response.json()
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        text: data.answer
+      }])
+    } catch (error) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        text: 'Sorry, I could not connect to the AI backend. Please make sure FastAPI is running on port 8000.'
+      }])
+    } finally {
       setLoading(false)
-    }, 1500)
+    }
   }
 
   return (
@@ -75,7 +84,7 @@ function AIChat() {
           🤖 AI CFO Assistant
         </h1>
         <p style={{ margin: 0, opacity: 0.8, fontSize: '13px' }}>
-          Powered by Groq LLaMA 3.3 70B • Live data from Supabase • 2,647 transactions in context
+          Powered by Groq LLaMA 3.3 70B • Live data from Supabase • {txnCount ? txnCount.toLocaleString() : 'Loading...'} transactions in context
         </p>
       </div>
 

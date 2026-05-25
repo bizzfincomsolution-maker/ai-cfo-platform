@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routes.ai_chat import router as ai_chat_router
 import uvicorn
 
 app = FastAPI(
@@ -8,7 +9,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS - allows React frontend to talk to FastAPI backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -16,6 +16,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register routers
+app.include_router(ai_chat_router)
 
 @app.get("/")
 def root():
@@ -30,4 +33,4 @@ def health_check():
     return {"status": "healthy"}
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
