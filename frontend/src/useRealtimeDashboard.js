@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 
 export function useRealtimeDashboard() {
-  const [data, setData] = useState(null)
+  const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
 
   const fetchAllTransactions = async () => {
@@ -36,13 +36,11 @@ export function useRealtimeDashboard() {
 
   const fetchData = async () => {
     const txns = await fetchAllTransactions()
-
     if (!txns || txns.length === 0) return
 
-    // Calculate KPI values
-    const income  = txns.filter(t => t.type === 'income')
-    const expense = txns.filter(t => t.type === 'expense')
-
+    // KPI calculations
+    const income   = txns.filter(t => t.type === 'income')
+    const expense  = txns.filter(t => t.type === 'expense')
     const totalRevenue  = income.reduce((s, t) => s + t.amount, 0)
     const totalExpenses = expense.reduce((s, t) => s + t.amount, 0)
     const cashFlow      = totalRevenue - totalExpenses
@@ -78,7 +76,10 @@ export function useRealtimeDashboard() {
       categoryMap[cat] = (categoryMap[cat] || 0) + t.amount
     })
     const categoryData = Object.entries(categoryMap)
-      .map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }))
+      .map(([name, value]) => ({
+        name,
+        value: parseFloat(value.toFixed(2))
+      }))
       .sort((a, b) => b.value - a.value)
 
     setData({
@@ -96,6 +97,11 @@ export function useRealtimeDashboard() {
   useEffect(() => {
     fetchData()
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Real-time subscription
+  useEffect(() => {
     const subscription = supabase
       .channel('transactions')
       .on('postgres_changes', {
@@ -109,6 +115,8 @@ export function useRealtimeDashboard() {
       .subscribe()
 
     return () => subscription.unsubscribe()
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { data, loading }

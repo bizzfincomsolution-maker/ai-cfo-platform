@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes.ai_chat import router as ai_chat_router
+from routes.forecast import router as forecast_router
 import uvicorn
 
 app = FastAPI(
@@ -19,6 +20,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(ai_chat_router)
+app.include_router(forecast_router)
 
 @app.get("/")
 def root():

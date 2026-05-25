@@ -1,7 +1,7 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  AreaChart, Area, ComposedChart, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import { useRealtimeDashboard } from '../useRealtimeDashboard'
@@ -12,6 +12,7 @@ const COLORS = ['#2563eb','#16a34a','#ea580c','#7c3aed','#ca8a04','#dc2626','#08
 
 // Format currency
 const formatRs = (value) => {
+  if (!value && value !== 0) return 'Rs.0'
   if (value >= 10000000) return `Rs.${(value/10000000).toFixed(1)}Cr`
   if (value >= 100000)   return `Rs.${(value/100000).toFixed(1)}L`
   if (value >= 1000)     return `Rs.${(value/1000).toFixed(1)}K`
@@ -20,6 +21,33 @@ const formatRs = (value) => {
 
 function Dashboard() {
   const { data, loading } = useRealtimeDashboard()
+
+  // Forecast states
+  const [forecastData, setForecastData]       = useState([])
+  const [forecastSummary, setForecastSummary] = useState(null)
+  const [forecastLoading, setForecastLoading] = useState(true)
+
+  // Fetch forecast on mount
+  useEffect(() => {
+    const fetchForecast = async () => {
+      try {
+        const res  = await fetch('http://localhost:8000/api/forecast/revenue')
+        const json = await res.json()
+        const historical = json.data
+          .filter(d => d.type === 'historical')
+          .slice(-12)
+        const forecast = json.data
+          .filter(d => d.type === 'forecast')
+        setForecastData([...historical, ...forecast])
+        setForecastSummary(json.summary)
+      } catch (err) {
+        console.error('Forecast error:', err)
+      } finally {
+        setForecastLoading(false)
+      }
+    }
+    fetchForecast()
+  }, [])
 
   if (loading) {
     return (
@@ -198,10 +226,149 @@ function Dashboard() {
         </div>
       </div>
 
+      {/* Revenue Forecast Chart */}
+      <div style={{
+        background: 'white', borderRadius: '12px',
+        padding: '24px', marginBottom: '24px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+      }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between',
+          alignItems: 'flex-start', marginBottom: '16px',
+          flexWrap: 'wrap', gap: '12px'
+        }}>
+          <div>
+            <h3 style={{ margin: '0 0 4px 0', color: '#1f2937' }}>
+              🔮 Revenue Forecast — Next 6 Months
+            </h3>
+            <p style={{ margin: 0, color: '#6b7280', fontSize: '13px' }}>
+              Powered by Facebook Prophet ML Model • 38 months training data
+            </p>
+          </div>
+
+          {/* Forecast Summary Cards */}
+          {forecastSummary && (
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{
+                background: '#f0fdf4', border: '1px solid #16a34a',
+                borderRadius: '8px', padding: '8px 16px', textAlign: 'center'
+              }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>
+                  Next Month Forecast
+                </p>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#16a34a' }}>
+                  {formatRs(forecastSummary.next_month_forecast)}
+                </p>
+              </div>
+              <div style={{
+                background: '#eff6ff', border: '1px solid #2563eb',
+                borderRadius: '8px', padding: '8px 16px', textAlign: 'center'
+              }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>
+                  6-Month Total
+                </p>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: '#2563eb' }}>
+                  {formatRs(forecastSummary.total_6month_forecast)}
+                </p>
+              </div>
+              <div style={{
+                background: forecastSummary.growth_pct >= 0 ? '#f0fdf4' : '#fef2f2',
+                border: `1px solid ${forecastSummary.growth_pct >= 0 ? '#16a34a' : '#dc2626'}`,
+                borderRadius: '8px', padding: '8px 16px', textAlign: 'center'
+              }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>
+                  Growth Forecast
+                </p>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: 'bold',
+                  color: forecastSummary.growth_pct >= 0 ? '#16a34a' : '#dc2626' }}>
+                  {forecastSummary.growth_pct >= 0 ? '+' : ''}{forecastSummary.growth_pct}%
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Forecast Chart */}
+        {forecastLoading ? (
+          <div style={{ textAlign: 'center', padding: '60px', color: '#6b7280' }}>
+            <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔮</div>
+            <p>Training Prophet ML model on 38 months of data...</p>
+            <p style={{ fontSize: '12px' }}>This takes 10-15 seconds</p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={320}>
+            <ComposedChart data={forecastData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="month"
+                tick={{ fontSize: 10 }}
+                tickFormatter={v => v.substring(5)}
+              />
+              <YAxis tickFormatter={formatRs} tick={{ fontSize: 10 }} />
+              <Tooltip
+                formatter={(value, name) => [formatRs(value), name]}
+                labelFormatter={label => `Month: ${label}`}
+              />
+              <Legend />
+              <Bar
+                dataKey="actual"
+                name="Actual Revenue"
+                fill="#2563eb"
+                radius={[4,4,0,0]}
+                opacity={0.8}
+              />
+              <Line
+                type="monotone"
+                dataKey="forecast"
+                name="Forecasted Revenue"
+                stroke="#16a34a"
+                strokeWidth={3}
+                strokeDasharray="8 4"
+                dot={{ fill: '#16a34a', r: 5 }}
+                connectNulls={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="upper"
+                name="Upper Bound"
+                stroke="#86efac"
+                strokeWidth={1}
+                strokeDasharray="4 4"
+                dot={false}
+                connectNulls={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="lower"
+                name="Lower Bound"
+                stroke="#86efac"
+                strokeWidth={1}
+                strokeDasharray="4 4"
+                dot={false}
+                connectNulls={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+
+        {/* Chart Legend Explanation */}
+        <div style={{
+          marginTop: '12px', padding: '10px 16px',
+          background: '#fefce8', borderRadius: '8px',
+          border: '1px solid #fde047', fontSize: '12px', color: '#713f12'
+        }}>
+          📊 <b>How to read:</b> Blue bars = actual historical revenue.
+          Green dashed line = Prophet ML forecast.
+          Light green lines = 80% confidence interval.
+          Forecast based on Indian fiscal seasonality detected in your data.
+        </div>
+      </div>
+
       {/* Recent Transactions Table */}
       <div style={{
         background: 'white', borderRadius: '12px',
-        padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        padding: '24px', marginBottom: '24px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       }}>
         <h3 style={{ margin: '0 0 16px 0', color: '#1f2937' }}>
           📋 Recent Transactions
@@ -226,7 +393,9 @@ function Dashboard() {
                   background: i % 2 === 0 ? 'white' : '#fafafa'
                 }}>
                   <td style={{ padding: '12px', fontSize: '13px' }}>{t.date}</td>
-                  <td style={{ padding: '12px', fontSize: '13px' }}>{t.vendor?.substring(0,25)}</td>
+                  <td style={{ padding: '12px', fontSize: '13px' }}>
+                    {t.vendor?.substring(0,25)}
+                  </td>
                   <td style={{ padding: '12px', fontSize: '13px', color: '#6b7280' }}>
                     {t.description?.substring(0,35)}...
                   </td>
