@@ -6,6 +6,7 @@ function Sidebar({ activePage, setActivePage }) {
     { id: 'upload',    icon: '📤', label: 'Upload' },
     { id: 'gst',       icon: '🧾', label: 'GST Calculator' },
     { id: 'chat',      icon: '🤖', label: 'AI Assistant' },
+    { id: 'settings',  icon: '⚙️', label: 'Settings' },
   ]
 
   return (

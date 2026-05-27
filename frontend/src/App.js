@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard'
 import Upload from './components/Upload'
 import GSTCalculator from './components/GSTCalculator'
 import AIChat from './components/AIChat'
+import Settings from './components/Settings'
 import './App.css'
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
       case 'upload':    return <Upload />
       case 'gst':       return <GSTCalculator />
       case 'chat':      return <AIChat />
+      case 'settings':  return <Settings />
       default:          return <Dashboard />
     }
   }
