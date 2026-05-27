@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes.ai_chat import router as ai_chat_router
 from routes.forecast import router as forecast_router
 from routes.upload import router as upload_router
+from routes.gst import router as gst_router
 import uvicorn
 
 app = FastAPI(
@@ -23,6 +24,7 @@ app.add_middleware(
 app.include_router(ai_chat_router)
 app.include_router(forecast_router)
 app.include_router(upload_router)
+app.include_router(gst_router)
 
 @app.get("/")
 def root():
