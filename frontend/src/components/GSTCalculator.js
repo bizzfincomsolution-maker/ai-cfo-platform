@@ -8,257 +8,247 @@ const GST_CATEGORIES = {
   'luxury_goods':     'Luxury Goods (Cars, Premium Items) — 28%',
 }
 
+const TAX_SLABS = [
+  ['Up to Rs.4,00,000',            '0% (Nil)'],
+  ['Rs.4,00,001 – Rs.8,00,000',    '5%'],
+  ['Rs.8,00,001 – Rs.12,00,000',   '10%'],
+  ['Rs.12,00,001 – Rs.16,00,000',  '15%'],
+  ['Rs.16,00,001 – Rs.20,00,000',  '20%'],
+  ['Rs.20,00,001 – Rs.24,00,000',  '25%'],
+  ['Above Rs.24,00,000',            '30%'],
+]
+
+const urgencyStyle = {
+  critical: { bg:'#fef2f2', border:'#fca5a5', badge:'#dc2626', text:'🔴 OVERDUE'  },
+  urgent:   { bg:'#fef2f2', border:'#fca5a5', badge:'#dc2626', text:'🔴 URGENT'   },
+  warning:  { bg:'#fefce8', border:'#fde047', badge:'#ca8a04', text:'🟡 UPCOMING' },
+  safe:     { bg:'#f0fdf4', border:'#86efac', badge:'#16a34a', text:'🟢 ON TRACK' },
+}
+
 function GSTCalculator() {
-  const [amount, setAmount]         = useState('')
-  const [category, setCategory]     = useState('general_goods')
-  const [txnType, setTxnType]       = useState('intrastate')
-  const [saveToDb, setSaveToDb]     = useState(false)
-  const [result, setResult]         = useState(null)
+  const [amount, setAmount]           = useState('')
+  const [category, setCategory]       = useState('general_goods')
+  const [txnType, setTxnType]         = useState('intrastate')
+  const [saveToDb, setSaveToDb]       = useState(false)
+  const [result, setResult]           = useState(null)
   const [calculating, setCalculating] = useState(false)
+  const [taxIncome, setTaxIncome]     = useState('')
+  const [taxResult, setTaxResult]     = useState(null)
+  const [calcTax, setCalcTax]         = useState(false)
+  const [deadlines, setDeadlines]     = useState([])
+  const [loadingDL, setLoadingDL]     = useState(true)
 
-  const [taxIncome, setTaxIncome]   = useState('')
-  const [taxResult, setTaxResult]   = useState(null)
-  const [calcTax, setCalcTax]       = useState(false)
-
-  const [deadlines, setDeadlines]   = useState([])
-  const [loadingDeadlines, setLoadingDeadlines] = useState(true)
-
-  // Fetch real deadlines from backend
   useEffect(() => {
-    const fetchDeadlines = async () => {
-      try {
-        const res  = await fetch('http://localhost:8000/api/gst/deadlines')
-        const data = await res.json()
-        setDeadlines(data.deadlines)
-      } catch (err) {
-        console.error('Failed to fetch deadlines:', err)
-      } finally {
-        setLoadingDeadlines(false)
-      }
-    }
-    fetchDeadlines()
+    fetch('http://localhost:8000/api/gst/deadlines')
+      .then(r => r.json())
+      .then(d => setDeadlines(d.deadlines))
+      .catch(console.error)
+      .finally(() => setLoadingDL(false))
   }, [])
 
-  // Calculate GST via backend
   const calculateGST = async () => {
     const base = parseFloat(amount)
     if (!base || isNaN(base)) return
-    setCalculating(true)
-    setResult(null)
-
+    setCalculating(true); setResult(null)
     try {
       const res = await fetch('http://localhost:8000/api/gst/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount:           base,
-          category:         category,
-          transaction_type: txnType,
-          save_to_db:       saveToDb,
-          vendor_name:      'Manual Calculation',
-          description:      `GST calculation — ${GST_CATEGORIES[category]}`
-        })
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ amount:base, category, transaction_type:txnType,
+          save_to_db:saveToDb, vendor_name:'Manual', description:'GST calculation' })
       })
-      const data = await res.json()
-      setResult(data)
-    } catch (err) {
-      alert('Error connecting to backend. Make sure FastAPI is running.')
-    } finally {
-      setCalculating(false)
-    }
+      setResult(await res.json())
+    } catch { alert('Backend error') }
+    finally { setCalculating(false) }
   }
 
-  // Calculate Income Tax via backend
   const calculateTax = async () => {
     const income = parseFloat(taxIncome)
     if (!income || isNaN(income)) return
-    setCalcTax(true)
-    setTaxResult(null)
-
+    setCalcTax(true); setTaxResult(null)
     try {
       const res = await fetch('http://localhost:8000/api/gst/calculate-tax', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ annual_income: income, regime: 'new' })
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ annual_income:income, regime:'new' })
       })
-      const data = await res.json()
-      setTaxResult(data)
-    } catch (err) {
-      alert('Error connecting to backend.')
-    } finally {
-      setCalcTax(false)
-    }
+      setTaxResult(await res.json())
+    } catch { alert('Backend error') }
+    finally { setCalcTax(false) }
   }
 
-  const formatRs = (v) => {
-    if (!v && v !== 0) return 'Rs.0'
-    return `Rs.${parseFloat(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-  }
-
-  const urgencyColors = {
-    critical: { bg: '#fef2f2', border: '#fca5a5', badge: '#dc2626', text: '🔴 OVERDUE'   },
-    urgent:   { bg: '#fef2f2', border: '#fca5a5', badge: '#dc2626', text: '🔴 URGENT'    },
-    warning:  { bg: '#fefce8', border: '#fde047', badge: '#ca8a04', text: '🟡 UPCOMING'  },
-    safe:     { bg: '#f0fdf4', border: '#86efac', badge: '#16a34a', text: '🟢 ON TRACK'  },
-  }
+  const fmtRs = v => v ? `Rs.${parseFloat(v).toLocaleString('en-IN',
+    {minimumFractionDigits:2})}` : 'Rs.0.00'
 
   return (
-    <div style={{ padding: '24px', background: '#f3f4f6', minHeight: '100vh' }}>
+    <div style={{ padding:'24px', background:'#f3f4f6', minHeight:'100vh',
+      fontFamily:'Inter, sans-serif', animation:'fadeSlideIn 0.35s ease forwards' }}>
 
       {/* Header */}
       <div style={{
-        background: 'linear-gradient(135deg, #16a34a, #059669)',
-        borderRadius: '12px', padding: '24px',
-        marginBottom: '24px', color: 'white'
+        background:'linear-gradient(135deg, #14532d, #16a34a)',
+        borderRadius:'16px', padding:'28px 32px',
+        marginBottom:'24px', color:'white',
+        boxShadow:'0 8px 32px rgba(22,163,74,0.2)',
+        position:'relative', overflow:'hidden'
       }}>
-        <h1 style={{ margin: '0 0 4px 0', fontSize: '24px' }}>
-          🧾 GST & Tax Calculator
-        </h1>
-        <p style={{ margin: 0, opacity: 0.8 }}>
-          Calculate CGST/SGST/IGST with Indian compliance logic • Powered by real backend API
+        <div style={{ position:'absolute', top:'-40px', right:'-40px',
+          width:'180px', height:'180px', borderRadius:'50%',
+          background:'rgba(255,255,255,0.05)' }}/>
+        <div style={{ display:'flex', alignItems:'center',
+          gap:'12px', marginBottom:'6px' }}>
+          <div style={{ width:'40px', height:'40px', borderRadius:'10px',
+            background:'rgba(255,255,255,0.15)', display:'flex',
+            alignItems:'center', justifyContent:'center', fontSize:'20px' }}>
+            🧾
+          </div>
+          <h1 style={{ margin:0, fontSize:'24px', fontWeight:'800',
+            letterSpacing:'-0.02em' }}>GST & Tax Calculator</h1>
+        </div>
+        <p style={{ margin:0, opacity:0.75, fontSize:'14px' }}>
+          Calculate CGST/SGST/IGST with Indian compliance logic •
+          FY 2025-26 New Tax Regime
         </p>
       </div>
 
-      {/* Row 1 — GST Calculator + Deadline Calendar */}
-      <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', flexWrap: 'wrap' }}>
+      {/* Row 1 — GST Calc + Calendar */}
+      <div style={{ display:'flex', gap:'20px',
+        marginBottom:'20px', flexWrap:'wrap' }}>
 
-        {/* GST Calculator */}
-        <div style={{
-          flex: 1, minWidth: '300px', background: 'white',
-          borderRadius: '12px', padding: '24px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-        }}>
-          <h3 style={{ margin: '0 0 20px 0', color: '#1f2937' }}>
+        {/* GST Calculator Card */}
+        <div style={{ flex:1, minWidth:'300px', background:'white',
+          borderRadius:'16px', padding:'24px',
+          boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
+          <h3 style={{ margin:'0 0 20px 0', fontSize:'16px',
+            fontWeight:'700', color:'#111827' }}>
             Calculate GST
           </h3>
 
-          {/* Amount Input */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', color: '#374151',
-              fontWeight: '600', fontSize: '14px', marginBottom: '6px' }}>
-              Transaction Amount (Rs.)
-            </label>
-            <input
-              type="number"
-              value={amount}
+          {/* Amount */}
+          <div style={{ marginBottom:'14px' }}>
+            <label style={{ display:'block', color:'#6b7280', fontSize:'11px',
+              fontWeight:'600', marginBottom:'6px', textTransform:'uppercase',
+              letterSpacing:'0.05em' }}>Transaction Amount (Rs.)</label>
+            <input type="number" value={amount}
               onChange={e => setAmount(e.target.value)}
               placeholder="Enter amount e.g. 100000"
-              style={{
-                width: '100%', padding: '10px 12px',
-                border: '1px solid #d1d5db', borderRadius: '8px',
-                fontSize: '15px', boxSizing: 'border-box'
-              }}
-            />
+              style={{ width:'100%', padding:'11px 14px',
+                border:'1.5px solid #e5e7eb', borderRadius:'10px',
+                fontSize:'15px', boxSizing:'border-box',
+                fontFamily:'Inter', color:'#111827',
+                transition:'all 0.2s' }} />
           </div>
 
-          {/* Category Dropdown */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', color: '#374151',
-              fontWeight: '600', fontSize: '14px', marginBottom: '6px' }}>
-              GST Category
-            </label>
-            <select
-              value={category}
-              onChange={e => setCategory(e.target.value)}
-              style={{
-                width: '100%', padding: '10px 12px',
-                border: '1px solid #d1d5db', borderRadius: '8px',
-                fontSize: '13px', background: 'white'
-              }}
-            >
-              {Object.entries(GST_CATEGORIES).map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
+          {/* Category */}
+          <div style={{ marginBottom:'14px' }}>
+            <label style={{ display:'block', color:'#6b7280', fontSize:'11px',
+              fontWeight:'600', marginBottom:'6px', textTransform:'uppercase',
+              letterSpacing:'0.05em' }}>GST Category</label>
+            <select value={category} onChange={e => setCategory(e.target.value)}
+              style={{ width:'100%', padding:'11px 14px',
+                border:'1.5px solid #e5e7eb', borderRadius:'10px',
+                fontSize:'13px', background:'white', fontFamily:'Inter',
+                color:'#111827', transition:'all 0.2s' }}>
+              {Object.entries(GST_CATEGORIES).map(([k,v]) => (
+                <option key={k} value={k}>{v}</option>
               ))}
             </select>
           </div>
 
           {/* Transaction Type */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', color: '#374151',
-              fontWeight: '600', fontSize: '14px', marginBottom: '6px' }}>
-              Transaction Type
-            </label>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              {['intrastate', 'interstate'].map(t => (
-                <button key={t}
-                  onClick={() => setTxnType(t)}
-                  style={{
-                    flex: 1, padding: '10px',
-                    border: `2px solid ${txnType === t ? '#16a34a' : '#d1d5db'}`,
-                    borderRadius: '8px', cursor: 'pointer',
-                    background: txnType === t ? '#dcfce7' : 'white',
-                    color: txnType === t ? '#16a34a' : '#6b7280',
-                    fontWeight: txnType === t ? '600' : '400',
-                    fontSize: '13px'
-                  }}>
-                  {t === 'intrastate' ? '🏠 Intrastate (CGST+SGST)' : '✈️ Interstate (IGST)'}
+          <div style={{ marginBottom:'14px' }}>
+            <label style={{ display:'block', color:'#6b7280', fontSize:'11px',
+              fontWeight:'600', marginBottom:'6px', textTransform:'uppercase',
+              letterSpacing:'0.05em' }}>Transaction Type</label>
+            <div style={{ display:'flex', gap:'10px' }}>
+              {[
+                { val:'intrastate', label:'🏠 Intrastate', sub:'CGST + SGST' },
+                { val:'interstate', label:'✈️ Interstate', sub:'IGST only'   },
+              ].map(t => (
+                <button key={t.val} onClick={() => setTxnType(t.val)} style={{
+                  flex:1, padding:'10px', borderRadius:'10px',
+                  border: `2px solid ${txnType===t.val ? '#16a34a' : '#e5e7eb'}`,
+                  background: txnType===t.val ? '#f0fdf4' : 'white',
+                  cursor:'pointer', transition:'all 0.2s', textAlign:'center'
+                }}>
+                  <p style={{ margin:0, fontSize:'13px', fontWeight:'600',
+                    color: txnType===t.val ? '#16a34a' : '#374151' }}>
+                    {t.label}
+                  </p>
+                  <p style={{ margin:0, fontSize:'11px',
+                    color: txnType===t.val ? '#16a34a' : '#9ca3af' }}>
+                    {t.sub}
+                  </p>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Save to DB Toggle */}
-          <div style={{ marginBottom: '20px', display: 'flex',
-            alignItems: 'center', gap: '10px' }}>
-            <input
-              type="checkbox"
-              id="save-db"
-              checked={saveToDb}
-              onChange={e => setSaveToDb(e.target.checked)}
-              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-            />
-            <label htmlFor="save-db" style={{ color: '#374151',
-              fontSize: '14px', cursor: 'pointer' }}>
-              Save to Supabase (updates dashboard in real-time)
-            </label>
-          </div>
-
-          {/* Calculate Button */}
-          <button onClick={calculateGST} disabled={calculating}
-            style={{
-              width: '100%', padding: '14px',
-              background: calculating ? '#86efac' : '#16a34a',
-              color: 'white', border: 'none', borderRadius: '8px',
-              fontSize: '16px', fontWeight: '600',
-              cursor: calculating ? 'not-allowed' : 'pointer'
+          {/* Save Toggle */}
+          <label style={{ display:'flex', alignItems:'center', gap:'10px',
+            marginBottom:'18px', cursor:'pointer' }}>
+            <div onClick={() => setSaveToDb(!saveToDb)} style={{
+              width:'40px', height:'22px', borderRadius:'999px',
+              background: saveToDb ? '#16a34a' : '#e5e7eb',
+              position:'relative', transition:'all 0.2s', flexShrink:0,
+              cursor:'pointer'
             }}>
-            {calculating ? '⏳ Calculating...' : 'Calculate GST'}
+              <div style={{
+                width:'18px', height:'18px', borderRadius:'50%',
+                background:'white', position:'absolute',
+                top:'2px', left: saveToDb ? '20px' : '2px',
+                transition:'all 0.2s',
+                boxShadow:'0 1px 4px rgba(0,0,0,0.2)'
+              }}/>
+            </div>
+            <span style={{ fontSize:'13px', color:'#374151', fontWeight:'500' }}>
+              Save to Supabase (updates dashboard live)
+            </span>
+          </label>
+
+          {/* Button */}
+          <button onClick={calculateGST} disabled={calculating} style={{
+            width:'100%', padding:'13px',
+            background: calculating ? '#86efac'
+              : 'linear-gradient(135deg, #16a34a, #22c55e)',
+            color:'white', border:'none', borderRadius:'10px',
+            fontSize:'15px', fontWeight:'600', cursor: calculating
+              ? 'not-allowed' : 'pointer',
+            boxShadow: calculating ? 'none' : '0 4px 12px rgba(22,163,74,0.3)',
+            transition:'all 0.2s', fontFamily:'Inter'
+          }}>
+            {calculating ? '⏳ Calculating...' : 'Calculate GST →'}
           </button>
 
           {/* Result */}
           {result && (
-            <div style={{
-              marginTop: '20px', background: '#f0fdf4',
-              border: '1px solid #16a34a', borderRadius: '8px',
-              padding: '16px'
-            }}>
-              <h4 style={{ margin: '0 0 12px 0', color: '#16a34a' }}>
-                GST Breakdown
-              </h4>
+            <div style={{ marginTop:'16px', background:'#f0fdf4',
+              border:'1px solid #86efac', borderRadius:'12px', padding:'16px' }}>
+              <p style={{ margin:'0 0 12px 0', fontSize:'13px',
+                fontWeight:'700', color:'#16a34a' }}>GST Breakdown</p>
               {[
-                ['Base Amount',  formatRs(result.base_amount),  '#1f2937'],
-                ['GST Rate',     `${result.gst_rate_pct}%`,     '#6b7280'],
-                ...(result.transaction_type === 'intrastate' ? [
-                  ['CGST',       formatRs(result.cgst),         '#2563eb'],
-                  ['SGST',       formatRs(result.sgst),         '#7c3aed'],
+                ['Base Amount',  fmtRs(result.base_amount),  '#111827', true],
+                ['GST Rate',     `${result.gst_rate_pct}%`,  '#6b7280', false],
+                ...(result.transaction_type==='intrastate' ? [
+                  ['CGST',       fmtRs(result.cgst),         '#2563eb', false],
+                  ['SGST',       fmtRs(result.sgst),         '#7c3aed', false],
                 ] : [
-                  ['IGST',       formatRs(result.igst),         '#ea580c'],
+                  ['IGST',       fmtRs(result.igst),         '#ea580c', false],
                 ]),
-                ['Total GST',   formatRs(result.total_gst),    '#dc2626'],
-                ['Final Amount',formatRs(result.final_amount),  '#16a34a'],
-              ].map(([label, value, color]) => (
-                <div key={label} style={{
-                  display: 'flex', justifyContent: 'space-between',
-                  padding: '6px 0',
-                  borderBottom: label === 'Total GST' ? '1px solid #d1fae5' : 'none'
-                }}>
-                  <span style={{ color: '#6b7280', fontSize: '14px' }}>{label}</span>
-                  <span style={{ color, fontWeight: '600', fontSize: '14px' }}>{value}</span>
+                ['Total GST',   fmtRs(result.total_gst),    '#dc2626', false],
+                ['Final Amount',fmtRs(result.final_amount),  '#16a34a', true],
+              ].map(([label, value, color, bold]) => (
+                <div key={label} style={{ display:'flex',
+                  justifyContent:'space-between', padding:'6px 0',
+                  borderBottom: label==='Total GST'
+                    ? '1px solid #d1fae5' : 'none' }}>
+                  <span style={{ fontSize:'13px', color:'#6b7280' }}>{label}</span>
+                  <span style={{ fontSize:'13px', color, fontWeight: bold ? '700' : '600' }}>
+                    {value}
+                  </span>
                 </div>
               ))}
               {result.saved_to_db && (
-                <p style={{ color: '#16a34a', fontSize: '12px',
-                  margin: '10px 0 0 0', fontWeight: '600' }}>
+                <p style={{ margin:'10px 0 0 0', fontSize:'12px',
+                  color:'#16a34a', fontWeight:'600' }}>
                   ⚡ Saved to Supabase — dashboard updated!
                 </p>
               )}
@@ -266,197 +256,170 @@ function GSTCalculator() {
           )}
         </div>
 
-        {/* GST Compliance Calendar */}
-        <div style={{
-          flex: 1, minWidth: '300px', background: 'white',
-          borderRadius: '12px', padding: '24px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-        }}>
-          <h3 style={{ margin: '0 0 20px 0', color: '#1f2937' }}>
+        {/* Compliance Calendar */}
+        <div style={{ flex:1, minWidth:'300px', background:'white',
+          borderRadius:'16px', padding:'24px',
+          boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
+          <h3 style={{ margin:'0 0 4px 0', fontSize:'16px',
+            fontWeight:'700', color:'#111827' }}>
             📅 GST Compliance Calendar
           </h3>
+          <p style={{ margin:'0 0 16px 0', fontSize:'12px', color:'#9ca3af' }}>
+            Real deadlines — fetched from backend API
+          </p>
 
-          {loadingDeadlines ? (
-            <p style={{ color: '#6b7280', textAlign: 'center', padding: '20px' }}>
+          {loadingDL ? (
+            <div style={{ textAlign:'center', padding:'40px', color:'#9ca3af' }}>
               ⏳ Loading deadlines...
-            </p>
-          ) : (
-            deadlines.map((d, i) => {
-              const colors = urgencyColors[d.urgency] || urgencyColors.safe
-              return (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'flex-start',
-                  gap: '12px', padding: '12px',
-                  marginBottom: '10px', borderRadius: '8px',
-                  background: colors.bg, border: `1px solid ${colors.border}`
-                }}>
-                  <div style={{
-                    width: '48px', height: '48px', borderRadius: '8px',
-                    background: colors.badge, display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    color: 'white', fontSize: '11px', fontWeight: 'bold',
-                    textAlign: 'center', flexShrink: 0, lineHeight: '1.2'
-                  }}>
-                    {d.days_remaining < 0
-                      ? 'DUE'
-                      : `${d.days_remaining}d`}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex',
-                      justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: '600', color: '#1f2937',
-                        fontSize: '14px' }}>{d.form}</span>
-                      <span style={{ fontSize: '11px', fontWeight: '600',
-                        color: colors.badge }}>{colors.text}</span>
-                    </div>
-                    <p style={{ margin: '2px 0', color: '#6b7280', fontSize: '12px' }}>
-                      {d.description}
-                    </p>
-                    <p style={{ margin: '2px 0', color: '#6b7280', fontSize: '11px' }}>
-                      Due: {d.due_date} • {d.frequency}
-                    </p>
-                    <p style={{ margin: '2px 0', color: '#dc2626', fontSize: '11px' }}>
-                      Penalty: {d.penalty}
-                    </p>
-                  </div>
+            </div>
+          ) : deadlines.map((d, i) => {
+            const s = urgencyStyle[d.urgency] || urgencyStyle.safe
+            return (
+              <div key={i} style={{ display:'flex', gap:'12px',
+                padding:'12px', marginBottom:'8px', borderRadius:'10px',
+                background:s.bg, border:`1px solid ${s.border}`,
+                transition:'transform 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.transform='translateX(3px)'}
+                onMouseLeave={e => e.currentTarget.style.transform='translateX(0)'}
+              >
+                <div style={{ width:'44px', height:'44px',
+                  borderRadius:'10px', background:s.badge,
+                  display:'flex', alignItems:'center',
+                  justifyContent:'center', color:'white',
+                  fontSize:'12px', fontWeight:'800',
+                  textAlign:'center', flexShrink:0, lineHeight:1.2 }}>
+                  {d.days_remaining < 0 ? 'DUE' : `${d.days_remaining}d`}
                 </div>
-              )
-            })
-          )}
+                <div style={{ flex:1 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between',
+                    alignItems:'center' }}>
+                    <span style={{ fontWeight:'700', color:'#111827',
+                      fontSize:'13px' }}>{d.form}</span>
+                    <span style={{ fontSize:'10px', fontWeight:'700',
+                      color:s.badge }}>{s.text}</span>
+                  </div>
+                  <p style={{ margin:'2px 0', color:'#6b7280', fontSize:'11px' }}>
+                    {d.description}
+                  </p>
+                  <p style={{ margin:'2px 0', color:'#9ca3af', fontSize:'10px' }}>
+                    Due: {d.due_date} • {d.frequency}
+                  </p>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
-      {/* Row 2 — Income Tax Calculator */}
-      <div style={{
-        background: 'white', borderRadius: '12px',
-        padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-      }}>
-        <h3 style={{ margin: '0 0 20px 0', color: '#1f2937' }}>
-          💼 Income Tax Calculator — FY 2025-26 (New Regime)
+      {/* Income Tax Calculator */}
+      <div style={{ background:'white', borderRadius:'16px',
+        padding:'24px', boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
+        <h3 style={{ margin:'0 0 4px 0', fontSize:'16px',
+          fontWeight:'700', color:'#111827' }}>
+          💼 Income Tax Calculator — FY 2025-26
         </h3>
+        <p style={{ margin:'0 0 20px 0', fontSize:'12px', color:'#9ca3af' }}>
+          New Tax Regime • Rebate u/s 87A • Health & Education Cess @ 4%
+        </p>
 
-        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+        <div style={{ display:'flex', gap:'24px', flexWrap:'wrap' }}>
 
-          {/* Tax Input */}
-          <div style={{ flex: 1, minWidth: '250px' }}>
-            <label style={{ display: 'block', color: '#374151',
-              fontWeight: '600', fontSize: '14px', marginBottom: '6px' }}>
-              Annual Income (Rs.)
-            </label>
-            <input
-              type="number"
-              value={taxIncome}
+          {/* Input */}
+          <div style={{ flex:1, minWidth:'250px' }}>
+            <label style={{ display:'block', color:'#6b7280', fontSize:'11px',
+              fontWeight:'600', marginBottom:'6px', textTransform:'uppercase',
+              letterSpacing:'0.05em' }}>Annual Income (Rs.)</label>
+            <input type="number" value={taxIncome}
               onChange={e => setTaxIncome(e.target.value)}
-              placeholder="Enter annual income e.g. 1500000"
-              style={{
-                width: '100%', padding: '10px 12px',
-                border: '1px solid #d1d5db', borderRadius: '8px',
-                fontSize: '15px', boxSizing: 'border-box',
-                marginBottom: '12px'
-              }}
-            />
-            <button onClick={calculateTax} disabled={calcTax}
-              style={{
-                width: '100%', padding: '12px',
-                background: calcTax ? '#93c5fd' : '#2563eb',
-                color: 'white', border: 'none', borderRadius: '8px',
-                fontSize: '15px', fontWeight: '600',
-                cursor: calcTax ? 'not-allowed' : 'pointer'
-              }}>
-              {calcTax ? '⏳ Calculating...' : 'Calculate Income Tax'}
+              placeholder="e.g. 1500000"
+              style={{ width:'100%', padding:'11px 14px',
+                border:'1.5px solid #e5e7eb', borderRadius:'10px',
+                fontSize:'15px', boxSizing:'border-box',
+                fontFamily:'Inter', marginBottom:'12px' }} />
+            <button onClick={calculateTax} disabled={calcTax} style={{
+              width:'100%', padding:'13px',
+              background: calcTax ? '#93c5fd'
+                : 'linear-gradient(135deg, #2563eb, #3b82f6)',
+              color:'white', border:'none', borderRadius:'10px',
+              fontSize:'15px', fontWeight:'600',
+              cursor: calcTax ? 'not-allowed' : 'pointer',
+              boxShadow: calcTax ? 'none' : '0 4px 12px rgba(37,99,235,0.3)',
+              fontFamily:'Inter', transition:'all 0.2s'
+            }}>
+              {calcTax ? '⏳ Calculating...' : 'Calculate Income Tax →'}
             </button>
 
-            {/* Tax Result */}
             {taxResult && (
-              <div style={{
-                marginTop: '16px', background: '#eff6ff',
-                border: '1px solid #2563eb', borderRadius: '8px',
-                padding: '16px'
-              }}>
-                <h4 style={{ margin: '0 0 12px 0', color: '#2563eb' }}>
-                  Tax Summary
-                </h4>
+              <div style={{ marginTop:'16px', background:'#eff6ff',
+                border:'1px solid #93c5fd', borderRadius:'12px', padding:'16px' }}>
+                <p style={{ margin:'0 0 12px 0', fontSize:'13px',
+                  fontWeight:'700', color:'#2563eb' }}>Tax Summary</p>
                 {[
-                  ['Annual Income',    formatRs(taxResult.annual_income),    '#1f2937'],
-                  ['Gross Tax',        formatRs(taxResult.gross_tax),        '#6b7280'],
-                  ['Rebate u/s 87A',  `-${formatRs(taxResult.rebate_87a)}`, '#16a34a'],
-                  ['Tax After Rebate', formatRs(taxResult.tax_after_rebate), '#6b7280'],
-                  ['Cess @ 4%',        formatRs(taxResult.cess_4pct),       '#ea580c'],
-                  ['Total Tax',        formatRs(taxResult.total_tax),       '#dc2626'],
-                  ['Effective Rate',   taxResult.effective_rate,             '#7c3aed'],
-                  ['Monthly TDS',      formatRs(taxResult.monthly_tds),     '#2563eb'],
-                  ['Take Home (Annual)',formatRs(taxResult.take_home_annual),'#16a34a'],
-                ].map(([label, value, color]) => (
-                  <div key={label} style={{
-                    display: 'flex', justifyContent: 'space-between',
-                    padding: '5px 0',
-                    borderBottom: label === 'Total Tax' ? '1px solid #bfdbfe' : 'none'
-                  }}>
-                    <span style={{ color: '#6b7280', fontSize: '13px' }}>{label}</span>
-                    <span style={{ color, fontWeight: '600', fontSize: '13px' }}>{value}</span>
+                  ['Annual Income',    fmtRs(taxResult.annual_income),    '#111827', true],
+                  ['Gross Tax',        fmtRs(taxResult.gross_tax),        '#6b7280', false],
+                  ['Rebate u/s 87A',  `-${fmtRs(taxResult.rebate_87a)}`, '#16a34a', false],
+                  ['Tax After Rebate', fmtRs(taxResult.tax_after_rebate), '#6b7280', false],
+                  ['Cess @ 4%',        fmtRs(taxResult.cess_4pct),       '#ea580c', false],
+                  ['Total Tax',        fmtRs(taxResult.total_tax),       '#dc2626', true],
+                  ['Effective Rate',   taxResult.effective_rate,           '#7c3aed', false],
+                  ['Monthly TDS',      fmtRs(taxResult.monthly_tds),     '#2563eb', false],
+                  ['Take Home',        fmtRs(taxResult.take_home_annual), '#16a34a', true],
+                ].map(([label, value, color, bold]) => (
+                  <div key={label} style={{ display:'flex',
+                    justifyContent:'space-between', padding:'5px 0',
+                    borderBottom: label==='Total Tax'
+                      ? '1px solid #bfdbfe' : 'none' }}>
+                    <span style={{ fontSize:'12px', color:'#6b7280' }}>{label}</span>
+                    <span style={{ fontSize:'12px', color,
+                      fontWeight: bold ? '700' : '600' }}>{value}</span>
                   </div>
                 ))}
                 {taxResult.rebate_87a > 0 && (
-                  <p style={{ color: '#16a34a', fontSize: '11px',
-                    margin: '10px 0 0 0', fontWeight: '600' }}>
-                    ✅ Eligible for full tax rebate u/s 87A — Zero tax payable!
-                  </p>
+                  <div style={{ marginTop:'10px', padding:'8px 10px',
+                    background:'#dcfce7', borderRadius:'8px',
+                    fontSize:'11px', color:'#16a34a', fontWeight:'600' }}>
+                    ✅ Eligible for full rebate u/s 87A — Zero tax!
+                  </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Tax Slabs Table */}
-          <div style={{ flex: 1, minWidth: '250px' }}>
-            <h4 style={{ margin: '0 0 12px 0', color: '#374151' }}>
-              New Tax Regime — FY 2025-26
-            </h4>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          {/* Slabs Table */}
+          <div style={{ flex:1, minWidth:'250px' }}>
+            <p style={{ margin:'0 0 10px 0', fontSize:'13px',
+              fontWeight:'600', color:'#374151' }}>
+              New Regime Tax Slabs — FY 2025-26
+            </p>
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
               <thead>
-                <tr style={{ background: '#1e3a5f' }}>
-                  {['Income Slab', 'Tax Rate'].map(h => (
-                    <th key={h} style={{ padding: '10px', textAlign: 'left',
-                      fontSize: '12px', color: 'white', fontWeight: '600' }}>
-                      {h}
-                    </th>
-                  ))}
+                <tr style={{ background:'#1e3a5f' }}>
+                  <th style={{ padding:'10px 12px', textAlign:'left',
+                    fontSize:'11px', color:'white', fontWeight:'600',
+                    borderRadius:'8px 0 0 0' }}>Income Slab</th>
+                  <th style={{ padding:'10px 12px', textAlign:'right',
+                    fontSize:'11px', color:'white', fontWeight:'600',
+                    borderRadius:'0 8px 0 0' }}>Rate</th>
                 </tr>
               </thead>
               <tbody>
-                {[
-                  ['Up to Rs.4,00,000',           '0% (Nil)'],
-                  ['Rs.4,00,001 - Rs.8,00,000',   '5%'],
-                  ['Rs.8,00,001 - Rs.12,00,000',  '10%'],
-                  ['Rs.12,00,001 - Rs.16,00,000', '15%'],
-                  ['Rs.16,00,001 - Rs.20,00,000', '20%'],
-                  ['Rs.20,00,001 - Rs.24,00,000', '25%'],
-                  ['Above Rs.24,00,000',           '30%'],
-                ].map(([slab, rate], i) => (
+                {TAX_SLABS.map(([slab, rate], i) => (
                   <tr key={i} style={{
-                    background: i % 2 === 0 ? 'white' : '#f3f4f6'
-                  }}>
-                    <td style={{ padding: '8px 10px', fontSize: '12px',
-                      color: '#374151' }}>{slab}</td>
-                    <td style={{ padding: '8px 10px', fontSize: '12px',
-                      fontWeight: '600', color: '#2563eb' }}>{rate}</td>
+                    background: i%2===0 ? 'white' : '#f9fafb' }}>
+                    <td style={{ padding:'9px 12px', fontSize:'12px',
+                      color:'#374151' }}>{slab}</td>
+                    <td style={{ padding:'9px 12px', fontSize:'12px',
+                      fontWeight:'700', color:'#2563eb',
+                      textAlign:'right' }}>{rate}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div style={{
-              marginTop: '12px', padding: '10px 12px',
-              background: '#f0fdf4', border: '1px solid #16a34a',
-              borderRadius: '8px', fontSize: '12px', color: '#16a34a'
-            }}>
-              <b>Rebate u/s 87A:</b> Full rebate up to Rs.60,000 for income
-              up to Rs.12,00,000 → Zero tax payable!
-            </div>
-            <div style={{
-              marginTop: '8px', padding: '10px 12px',
-              background: '#eff6ff', border: '1px solid #2563eb',
-              borderRadius: '8px', fontSize: '12px', color: '#2563eb'
-            }}>
-              <b>Health & Education Cess:</b> 4% on total tax payable
+            <div style={{ marginTop:'10px', padding:'10px 12px',
+              background:'#f0fdf4', border:'1px solid #86efac',
+              borderRadius:'8px', fontSize:'12px', color:'#16a34a',
+              fontWeight:'500' }}>
+              <b>Rebate u/s 87A:</b> Zero tax for income ≤ Rs.12L
             </div>
           </div>
         </div>
